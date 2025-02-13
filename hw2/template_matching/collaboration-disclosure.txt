@@ -1,0 +1,4 @@
+1. Asked claude for the optimization, my own code is there as well
+2. Couldn't figure out what was wrong, claude told me that the rectangle drawing happens in reverse
+3. Claude told me that cv.TM_CCOEFF_NORMED works better on ignoring bright areas, 
+as they were being matched as well when I used cv.TM_CCORR
