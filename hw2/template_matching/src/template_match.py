@@ -1,11 +1,11 @@
 import cv2 as cv
 import numpy as np
 import os
-
+# from google.colab.patches import cv2_imshow
 
 # NOTE: these values are just placeholders, you may need to adjust them
-_DEFAULT_THRESHOLD = 0.8
-_DEFAULT_NMS_WINDOW = 5
+_DEFAULT_THRESHOLD = 0.7
+_DEFAULT_NMS_WINDOW = 9
 
 
 def non_maximal_suppression_2d(values: np.ndarray, window: int = 5) -> np.ndarray:
@@ -15,7 +15,40 @@ def non_maximal_suppression_2d(values: np.ndarray, window: int = 5) -> np.ndarra
 
     The original values matrix is not modified, but a new matrix is returned.
     """
-    raise NotImplementedError("Your code here.")
+    if (window % 2) == 0:
+        raise ValueError("Window size must be odd.")
+    h, w = values.shape
+    pad = (window - 1)//2
+    padded_values = np.pad(values, pad, mode='constant')
+    
+    # UNOPTIMIZED CODE
+    # This was my own code, Claude suggested the optimization below
+    # It works perfectly as well
+    
+    # ret = np.zeros(values.shape) 
+    # for i in range(pad, pad+h):
+    #   for j in range(pad, pad+w):
+    #     val = padded_values[i, j]
+    #     max_val = -1
+    #     for w_i in range(window):
+    #       for w_j in range(window):
+    #         max_val = max(max_val, padded_values[i-pad+w_i][j-pad+w_j])
+    #     ret[i-pad][j-pad] = val if val == max_val else 0
+    # return ret
+
+    # OPTIMIZED CODE
+    
+    # Create a view of the padded array with rolling windows 
+    windows = np.lib.stride_tricks.sliding_window_view(
+        padded_values, 
+        (window, window)
+    )
+    
+    # Find the maximum value in each window
+    local_max = np.max(windows, axis=(2, 3))
+    
+    # Keep only the values that are equal to their local maximum
+    return np.where(values == local_max, values, 0)
 
 
 def apply_threshold(values: np.ndarray, threshold: float) -> np.ndarray:
@@ -25,7 +58,12 @@ def apply_threshold(values: np.ndarray, threshold: float) -> np.ndarray:
 
     The original values matrix is not modified, but a new matrix is returned.
     """
-    raise NotImplementedError("Your code here.")
+    ret = np.zeros(values.shape)
+    for i in range(values.shape[0]):
+        for j in range(values.shape[1]):
+            ret[i, j] = values[i,j] if values[i, j] > threshold else 0
+
+    return ret
 
 
 def find_objects_by_template_matching(
@@ -47,7 +85,19 @@ def find_objects_by_template_matching(
        to non_maximal_suppression_2d for this.
     4. Use np.where() to find all remaining nonzero pixels --> these are our matches.
     """
-    raise NotImplementedError("Your code here.")
+    match_mat = cv.matchTemplate(image, template, method=cv.TM_CCOEFF_NORMED) 
+    min_val, max_val, _, _ = cv.minMaxLoc(match_mat)
+
+    if (max_val - min_val) != 0:
+        norm_match_mat = (match_mat - min_val) / (max_val - min_val)
+        
+    thresh_mat = apply_threshold(norm_match_mat, threshold)
+    nms_mat = non_maximal_suppression_2d(thresh_mat, nms_window)
+    
+    matches = np.where(nms_mat != 0)
+    matches = list(zip(matches[1], matches[0]))
+
+    return matches
 
 
 def visualize_matches(scene: np.ndarray, obj_hw: tuple[int, int], xy: list[tuple[int, int]]):
@@ -69,8 +119,32 @@ def visualize_matches(scene: np.ndarray, obj_hw: tuple[int, int], xy: list[tuple
     )
 
     cv.imshow("Matches", scene)
+    # cv2_imshow(scene)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+
+# Made a function to run the template matching instead
+# of passing inputs as arguments to the python file
+def run_template_matching(image_path: str, template_path: str, threshold: float = _DEFAULT_THRESHOLD, nms_window: int = _DEFAULT_NMS_WINDOW):
+    """Runs template matching on the given image and template."""
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image not found: {image_path}")
+
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"Image not found: {template_path}")
+
+    if nms_window % 2 == 0:
+        raise ValueError("The window size must be odd.")
+
+    if nms_window < 1:
+        raise ValueError("The window size must be greater than or equal to 1.")
+
+    scene = cv.imread(image_path)
+    template = cv.imread(template_path)
+
+    xy = find_objects_by_template_matching(scene, template, threshold, nms_window)
+    visualize_matches(scene, template.shape[:2], xy)
 
 
 if __name__ == "__main__":
