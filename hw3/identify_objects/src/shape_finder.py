@@ -32,15 +32,22 @@ def otsu_threshold(counts: np.ndarray, bins: Optional[np.ndarray] = None) -> flo
         if n == 0:
             return 0
         mu = np.dot(bins_, counts_) / n
-        return np.dot(counts_, (bins_ - mu) ** 2) / n
+        return np.dot(counts_, (bins_ - mu) ** 2) / n 
+    
+    
 
     lowest_variance, best_threshold = float("inf"), 0
     for i in range(len(counts)):
         variance_left = variance_helper(bins[: i + 1], counts[: i + 1])
-        if variance_left < lowest_variance:
+        variance_right = variance_helper(bins[i + 1 :], counts[i + 1 :])
+        w_left, w_right = np.sum(counts[:i+1]), np.sum(counts[i+1:])
+        total = w_left + w_right
+        
+        inter_class_variance = (w_left * variance_left + w_right * variance_right)/total
+        if inter_class_variance < lowest_variance:
             # Set the threshold to the midpoint between bins[i] and bins[i+1]
             th = (bins[i] + bins[i + 1]) / 2 if i < len(bins) - 1 else bins[i] + 0.5
-            lowest_variance, best_threshold = variance_left, th
+            lowest_variance, best_threshold = inter_class_variance, th
     return best_threshold
 
 
@@ -57,7 +64,7 @@ def roundedness(moments: dict[str, float]) -> float:
     # The eigenvalues of the covariance matrix are the variances of the shape in the x and y
     # directions. The roundedness is the ratio of the smallest standard deviation to the largest.
     stdevs = np.sqrt(np.linalg.eigvalsh(covariance))
-    return max(stdevs) / min(stdevs)
+    return min(stdevs) / max(stdevs)
 
 
 def threshold_on_hue(image: np.ndarray, color: str, hue_tolerance: int = 10) -> np.ndarray:
@@ -116,7 +123,7 @@ def sample_points_on_ring(
     the image, it is ignored.
     """
     locations_xy = [
-        (center_xy[0] + radius * np.cos(theta), center_xy[1] + radius * np.cos(theta))
+        (center_xy[0] + radius * np.cos(theta), center_xy[1] + radius * np.sin(theta)) # fixed this
         for theta in np.linspace(0, 2 * np.pi, num_points + 1)
     ]
     return [
@@ -137,7 +144,7 @@ def identify_single_shape(binary: np.ndarray) -> str:
     # First, we can distinguish between (rectangles and wedges) vs (circles and crosses) by looking
     # at the roundedness of the shape. If the roundedness is high, it's a circle or cross. If it's
     # low, it's a rectangle or wedge.
-    if roundedness(moments) < 0.5:
+    if roundedness(moments) < 0.9: # changed this from 0.5
         # If roundedness is low, it's a rectangle or wedge. We can distinguish between these two
         # by checking if the shape is symmetric about its centroid. If it is, it's a rectangle.
         # Otherwise, it's a wedge.
@@ -154,7 +161,7 @@ def identify_single_shape(binary: np.ndarray) -> str:
         # cross). We can use the square root of the central second moment to estimate the
         # standard deviation or 'size' of the shape, and adjust the radius accordingly.
         stdev = np.sqrt(moments["mu20"] / moments["m00"])
-        samples = sample_points_on_ring(binary, centroid_xy, radius=3 * stdev, num_points=4)
+        samples = sample_points_on_ring(binary, centroid_xy, radius= 0.9 * stdev, num_points=4) # removed 3 *
         if np.all(samples):
             return "circle"
         else:
@@ -189,14 +196,14 @@ def find_shapes(
     # For each shape of the correct type, record its location, size, and a boolean flag indicating
     # whether it's the correct color.
     shape_info = []
-    for i in range(num_labels):
+    for i in range(num_labels): # iterate over all components/shapes
         # Skip if shape is too small (we can't identify very very small shapes))
-        if stats[i, cv.CC_STAT_AREA] < min_area:
+        if stats[i, cv.CC_STAT_AREA] < min_area: 
             continue
 
         # Make a new temporary binary image with just the current shape
         shape_i_only = np.zeros_like(binary_all_colors)
-        shape_i_only[labels == i] = 1
+        shape_i_only[labels == i] = 1 # gets the iamge but pixels one only one 
 
         # Identify the shape
         shape_type = identify_single_shape(shape_i_only)
