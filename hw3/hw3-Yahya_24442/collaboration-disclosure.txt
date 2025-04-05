@@ -1,0 +1,2 @@
+Collaborated with maaz to find errors. Used to GPT to double check functions and math as well as 
+parameter like the rotation matrix.

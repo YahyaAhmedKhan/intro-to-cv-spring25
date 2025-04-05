@@ -2,9 +2,12 @@
 matplotlib
 numpy
 opencv-python
+torch
+torchvision
+tensorboard
+tqdm
 
 # Style and linting
 black
 flake8
 flake8-bugbear
-

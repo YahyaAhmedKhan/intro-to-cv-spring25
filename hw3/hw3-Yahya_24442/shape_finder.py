@@ -1,3 +1,4 @@
+
 import numpy as np
 import cv2 as cv
 import os
@@ -5,15 +6,13 @@ from typing import Optional
 
 
 SIZE_OPTIONS = ["large", "small"]
-# The hue values of the 6 primary colors are in the range 0-180 and are equally spaced
-# Its crazy that you gave us wrong colors
 COLOR_OPTIONS = {
-    "red": 0,
-    "yellow": 30,
-    "green": 60,
-    "cyan": 90,
-    "blue": 120,
-    "magenta": 150
+    "red": 0,       # 0° (Red starts at 0° and also at 180° for deeper red shades)
+    "yellow": 30,   # ~30° (Yellow)
+    "green": 60,    # ~60° (Green)
+    "cyan": 90,     # ~90° (Cyan)
+    "blue": 120,    # ~120° (Blue)
+    "magenta": 150  # ~170° (Magenta/Pink)
 }
 SHAPE_OPTIONS = ["circle", "wedge", "rectangle", "cross"]
 
@@ -42,15 +41,20 @@ def otsu_threshold(counts: np.ndarray, bins: Optional[np.ndarray] = None) -> flo
         mu = np.dot(bins_, counts_) / n
         return np.dot(counts_, (bins_ - mu) ** 2) / n
 
+
+
     lowest_variance, best_threshold = float("inf"), 0
     for i in range(len(counts)):
         variance_left = variance_helper(bins[: i + 1], counts[: i + 1])
         variance_right = variance_helper(bins[i + 1 :], counts[i + 1 :])
-        intra_sum = (variance_left * np.sum(counts[: i + 1])) + (variance_right * np.sum(counts[i + 1 :]))
-        if intra_sum < lowest_variance:
+        w_left, w_right = np.sum(counts[:i+1]), np.sum(counts[i+1:])
+        total = w_left + w_right
+
+        inter_class_variance = (w_left * variance_left + w_right * variance_right)/total # changed this to get left and right variance
+        if inter_class_variance < lowest_variance:
             # Set the threshold to the midpoint between bins[i] and bins[i+1]
             th = (bins[i] + bins[i + 1]) / 2 if i < len(bins) - 1 else bins[i] + 0.5
-            lowest_variance, best_threshold = intra_sum, th
+            lowest_variance, best_threshold = inter_class_variance, th
     return best_threshold
 
 
@@ -67,7 +71,7 @@ def roundedness(moments: dict[str, float]) -> float:
     # The eigenvalues of the covariance matrix are the variances of the shape in the x and y
     # directions. The roundedness is the ratio of the smallest standard deviation to the largest.
     stdevs = np.sqrt(np.linalg.eigvalsh(covariance))
-    return min(stdevs) / max(stdevs)        # one more fix
+    return min(stdevs) / max(stdevs) # changed this to min/max from max/min
 
 
 def threshold_on_hue(image: np.ndarray, color: str, hue_tolerance: int = 10) -> np.ndarray:
@@ -98,7 +102,7 @@ def threshold_on_hue(image: np.ndarray, color: str, hue_tolerance: int = 10) -> 
         binary = cv.inRange(hsv, range_lo, range_hi)
 
     # Apply morphological operations to clean up the binary image
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))     # Make this 3x3
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
     binary = cv.morphologyEx(binary, cv.MORPH_OPEN, kernel)
 
     return binary
@@ -112,7 +116,7 @@ def is_shape_symmetric(
     about its centroid. The threshold is the fraction of pixels that must match for the shape to be
     considered symmetric.
     """
-    rot = cv.getRotationMatrix2D(centroid_xy, 180, 1)       # Not in rad
+    rot = cv.getRotationMatrix2D(centroid_xy, 180, 1) # changed the angle to 180, instead of pi
     flipped = cv.warpAffine(binary, rot, binary.shape)
     frac_match = np.sum(binary * flipped) / np.sum(binary)
     return frac_match > threshold
@@ -126,7 +130,7 @@ def sample_points_on_ring(
     the image, it is ignored.
     """
     locations_xy = [
-        (center_xy[0] + radius * np.cos(theta), center_xy[1] + radius * np.sin(theta))      # Fix 2
+        (center_xy[0] + radius * np.cos(theta), center_xy[1] + radius * np.sin(theta)) # changed it to use sin instead of cos
         for theta in np.linspace(0, 2 * np.pi, num_points + 1)
     ]
     return [
@@ -147,25 +151,23 @@ def identify_single_shape(binary: np.ndarray) -> str:
     # First, we can distinguish between (rectangles and wedges) vs (circles and crosses) by looking
     # at the roundedness of the shape. If the roundedness is high, it's a circle or cross. If it's
     # low, it's a rectangle or wedge.
-    deb_var = roundedness(moments)
-    if deb_var < 0.85:      # roundedness threshold cahnged
+    roundness = roundedness(moments)
+    
+    if roundness < 0.7: # changed this from 0.5
         # If roundedness is low, it's a rectangle or wedge. We can distinguish between these two
         # by checking if the shape is symmetric about its centroid. If it is, it's a rectangle.
         # Otherwise, it's a wedge.
-        if is_shape_symmetric(binary, centroid_xy, threshold=0.8):
+        if is_shape_symmetric(binary, centroid_xy, threshold=0.90): # changed threshold from 0.8
             return "rectangle"
         else:
             return "wedge"
     else:
-        # In this else clause, we know the shape is either a circle or a cross. We can
-        # distinguish between these two by sampling points in a ring around the centroid. If all
-        # the sampled points are 1, it's a circle. If we get some 0s, it's a cross. The trick is
-        # to choose the radius of the ring so that it's not too big (all sampled points would be
+        # Choose the radius of the ring so that it's not too big (all sampled points would be
         # outside the shape) and not too small (all sampled points would be 1s, even for the
         # cross). We can use the square root of the central second moment to estimate the
         # standard deviation or 'size' of the shape, and adjust the radius accordingly.
         stdev = np.sqrt(moments["mu20"] / moments["m00"])
-        samples = sample_points_on_ring(binary, centroid_xy, radius=0.9 * stdev, num_points=50)  # 3*dev would go outside
+        samples = sample_points_on_ring(binary, centroid_xy, radius= 0.9 * stdev, num_points=30) # used more points
         if np.all(samples):
             return "circle"
         else:
@@ -177,16 +179,14 @@ def find_shapes(
     size: str,
     color: str,
     shape: str,
-    min_area: int = 3,
-    hue_tolerance: int = 15,
+    min_area: int = 3, # changed this from 10
+    hue_tolerance: int = 10,
 ) -> np.ndarray:
     """Find all locations (centroids) in the image where there is a shape of the specified
     size, color, and shape type. Return the (x,y) locations of these centroids as a numpy array
     of shape (N, 2) where N is the number of shapes found.
     """
-    # First pass: preprocess the image using a hue tolerance of ± 90. This gives ALL shapes that
-    # are saturated, effectively ignoring the hue. We'll use this to figure out what counts as
-    # 'large' or 'small' shapes, regardless of color.
+    # First pass: This gives ALL shapes that are saturated, effectively ignoring the hue
     binary_all_colors = threshold_on_hue(image, color, hue_tolerance=90)
 
     # Second pass: threshold the image using the specified hue tolerance to get a binary image with
@@ -196,26 +196,21 @@ def find_shapes(
     # Use connected components to segment the binary image into individual shapes
     num_labels, labels, stats, centroids = cv.connectedComponentsWithStats(binary_all_colors)
 
-    # show_shape(binary_this_color, 0)
-    # show_shape(binary_all_colors, 1)
-
     # Loop over the identified connected components and identify their shape, size, and color.
-    # For each shape of the correct type, record its location, size, and a boolean flag indicating
-    # whether it's the correct color.
     shape_info = []
-    for i in range(num_labels):
+    for i in range(num_labels): # iterate over all components/shapes
         # Skip if shape is too small (we can't identify very very small shapes))
-        if stats[i, cv.CC_STAT_AREA] < min_area or i == 0:      # skip background
+        if i==0:
+            continue
+        if stats[i, cv.CC_STAT_AREA] < min_area:
             continue
 
         # Make a new temporary binary image with just the current shape
-        shape_i_only = np.zeros_like(binary_all_colors)
-        shape_i_only[labels == i] = 1
-
+        shape_i_only = np.zeros_like(binary_this_color)
+        shape_i_only[labels == i] = 1 # gets the intersection of the this component i and all_shapes_binary
+        
         # Identify the shape
         shape_type = identify_single_shape(shape_i_only)
-
-        # show_shape(shape_i_only, shape_type)
 
         # If it's the kind of shape we're looking for, record its location and size
         if shape_type == shape:
@@ -225,24 +220,26 @@ def find_shapes(
             )
             shape_info.append((tuple(centroids[i]), area, is_correct_color))
 
-    # Last, we need to filter out the shapes that are the wrong size. We'll do this by finding
-    # a good threshold that distinguishes 'small' from 'large' for our given shape, across all
-    # colors. Then we'll filter out the shapes that are the wrong size / color
+    # Last, we need to filter out the shapes that are the wrong size.
     areas, counts = np.unique([area for _, area, _ in shape_info], return_counts=True)
-    area_threshold = (max(areas) - min(areas))/2      # Replaced Otsu with this
+    
+    area_threshold = otsu_threshold(counts, areas) # fixed this to get thresh properly
+    
     if size == "small":
         return np.array(
             [
                 loc
                 for loc, area, correct_color in shape_info
+                if correct_color
                 if area < area_threshold and correct_color
-            ]
+            ] 
         )
     else:
         return np.array(
             [
                 loc
                 for loc, area, correct_color in shape_info
+                if correct_color
                 if area >= area_threshold and correct_color
             ]
         )
@@ -260,9 +257,9 @@ def annotate_locations(image: np.ndarray, locs_xy: np.ndarray) -> np.ndarray:
         cv.circle(annotated, (x, y), symbol_size, black, 1, cv.LINE_AA)
     return annotated
 
-import matplotlib.pyplot as plt
-# To debug
 
+import matplotlib.pyplot as plt
+# helper function, because I use headless opencv
 def show_shape(shape_i_only, i, figsize=(8, 8)):  # Default to 8x8 inches
     """Displays the image with only the pixels of shape i and prints the label."""
     if len(shape_i_only.shape) == 3:  # Check if the image has 3 channels
@@ -273,43 +270,6 @@ def show_shape(shape_i_only, i, figsize=(8, 8)):  # Default to 8x8 inches
     plt.title(f"Label: {i}")
     plt.show()
 
-# if __name__ == "__main__":
-#     import argparse
-
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("image", help="Path to the image file")
-#     parser.add_argument("size", help="Return large or small shapes?", choices=SIZE_OPTIONS)
-#     parser.add_argument(
-#         "color", help="Return shapes of a specific color?", choices=COLOR_OPTIONS.keys()
-#     )
-#     parser.add_argument("shape", help="Return shapes of a specific type?", choices=SHAPE_OPTIONS)
-#     parser.add_argument("--min-area", type=int, default=10, help="Minimum area of a shape")
-#     parser.add_argument("--hue-tolerance", type=int, default=10, help="Hue tolerance")
-#     args = parser.parse_args()
-
-#     if not os.path.exists(args.image):
-#         raise FileNotFoundError(f"File not found: {args.image}")
-
-#     # Load the image
-#     im = cv.imread(args.image)
-
-#     # Find the shapes
-#     locations = find_shapes(
-#         im,
-#         args.size,
-#         args.color,
-#         args.shape,
-#         min_area=args.min_area,
-#         hue_tolerance=args.hue_tolerance,
-#     )
-#     description = f"Located {len(locations)} {args.size} {args.color} {args.shape}s"
-
-#     # Annotate the locations on the image and display it
-#     cv.imshow(description, annotate_locations(im, locations))
-#     cv.waitKey(0)
-#     cv.destroyAllWindows()
-
-
 def main(image_path: str, size: str, color: str, shape: str, min_area: int = 10, hue_tolerance: int = 10):
 
     if not os.path.exists(image_path):
@@ -317,7 +277,7 @@ def main(image_path: str, size: str, color: str, shape: str, min_area: int = 10,
 
     # Load the image
     im = cv.imread(image_path)
-
+    
     # Find the shapes
     locations = find_shapes(im, size, color, shape, min_area=min_area, hue_tolerance=hue_tolerance)
     description = f"Located {len(locations)} {size} {color} {shape}s"
@@ -325,16 +285,54 @@ def main(image_path: str, size: str, color: str, shape: str, min_area: int = 10,
     # Annotate the locations on the image
     annotated_image = annotate_locations(im, locations)
 
-    # Display the annotated image using cv2_imshow
     # cv2_imshow(annotated_image)
-    show_shape(annotated_image, -2)
+    show_shape(annotated_image, "result")
     print(description)
 
 
 # Example usage
 image_path = 'shapes.png'  # Replace with your image path
 size = 'small'  # or 'small'
-color = 'blue'  # or any color from COLOR_OPTIONS
-shape = 'rectangle'  # or 'wedge', 'rectangle', 'cross'
+color = 'red'  # or any color from COLOR_OPTIONS
+shape = 'circle'  # or 'wedge', 'rectangle', 'cross'
 
-main(image_path, size, color, shape)
+# main(image_path, size, color, shape) # my functino to run program without arguments
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("image", help="Path to the image file")
+    parser.add_argument("size", help="Return large or small shapes?", choices=SIZE_OPTIONS)
+    parser.add_argument(
+        "color", help="Return shapes of a specific color?", choices=COLOR_OPTIONS.keys()
+    )
+    parser.add_argument("shape", help="Return shapes of a specific type?", choices=SHAPE_OPTIONS)
+    parser.add_argument("--min-area", type=int, default=10, help="Minimum area of a shape")
+    parser.add_argument("--hue-tolerance", type=int, default=10, help="Hue tolerance")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.image):
+        raise FileNotFoundError(f"File not found: {args.image}")
+
+    # Load the image
+    im = cv.imread(args.image)
+
+    # Find the shapes
+    locations = find_shapes(
+        im,
+        args.size,
+        args.color,
+        args.shape,
+        min_area=args.min_area,
+        hue_tolerance=args.hue_tolerance,
+    )
+    description = f"Located {len(locations)} {args.size} {args.color} {args.shape}s"
+
+    # Annotate the locations on the image and display it
+    cv.imshow(description, annotate_locations(im, locations))
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
+# python3 ./shape_finder.py shapes.png large red circle
