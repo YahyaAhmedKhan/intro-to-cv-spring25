@@ -3,12 +3,11 @@ from torchvision.transforms import ToTensor, Normalize, Compose
 from torch.utils.data import Dataset, DataLoader
 from config import DATA_ROOT
 
-
 def dataset_info(dataset: Dataset) -> str:
-    num_samples = ...  # YOUR CODE HERE
-    num_classes = ...
-    im_shape = ...
-    im_dtype = ...
+    num_samples = len(dataset)
+    num_classes = len(set(dataset.targets))
+    im_shape = dataset[0][0].shape
+    im_dtype = dataset[0][0].dtype
     return (
         f"Dataset with {num_samples} samples, "
         f"{num_classes} classes, image shape {im_shape} "
@@ -17,10 +16,10 @@ def dataset_info(dataset: Dataset) -> str:
 
 
 def dataloader_info(dataloader: DataLoader):
-    num_batches = ...  # YOUR CODE HERE
-    num_samples = ...
-    batch_size = ...
-    batch_shape = ...
+    num_batches = len(dataloader)
+    num_samples = len(dataloader.dataset)
+    batch_size = dataloader.batch_size
+    batch_shape = next(iter(dataloader))[0].shape
     return (
         f"DataLoader with {num_samples} total samples "
         f"split across {num_batches} batches of size {batch_size}. "
