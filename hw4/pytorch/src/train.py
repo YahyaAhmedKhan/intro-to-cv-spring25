@@ -1,3 +1,4 @@
+
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -8,6 +9,9 @@ from models import LogisticRegression
 from tqdm.auto import trange, tqdm
 from typing import Optional, Callable
 from pathlib import Path
+
+from itertools import islice
+
 
 
 def accuracy(logits: torch.Tensor, labels: torch.Tensor) -> float:
@@ -26,9 +30,23 @@ def train_single_epoch(
     writer: Optional[SummaryWriter] = None,
 ) -> int:
     """Train the model for a single epoch. Returns the updated step count."""
-    raise NotImplementedError("Your code here. Hint: about 12 lines in the answer key")
-    return step
 
+    # raise NotImplementedError("Your code here. Hint: about 12 lines in the answer key")
+    model.train()
+    for batch, (x, y) in enumerate(train_data):
+        x = x.view(x.size(0), -1)
+        y_pred = model.forward(x)
+        loss = criterion(y_pred, y)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        acc = accuracy(y_pred, y)
+        if writer is not None:
+            writer.add_scalar("loss/train", loss, step)
+            writer.add_scalar("acc/train", acc, step)
+        step +=1
+    return step
 
 def evaluate(
     model: nn.Module,
@@ -44,6 +62,7 @@ def evaluate(
         total_loss, total_acc, total_samples = 0, 0, 0
         for im, label in tqdm(val_data, desc="validation loop", position=1, leave=False):
             im, label = im.to(device), label.to(device)
+            im = im.view(im.size(0), -1)  # Flattens input from [B, 1, 28, 28] → [B, 784]
             out = model(im)
             total_loss += criterion(out, label).item()
             total_acc += accuracy(out, label) * len(label)
@@ -95,6 +114,9 @@ def train(
     if writer is not None:
         writer.close()
 
+import sys
+sys.argv = ["notebook", "--dataset" , "mnist", "--batch-size", "32", "--lr", "1e-3"]
+
 
 if __name__ == "__main__":
     import argparse
@@ -141,3 +163,4 @@ if __name__ == "__main__":
     args.log_dir = args.log_dir / run_name
 
     train(model, data_train, data_val, args.num_epochs, args.lr, args.momentum, args.device, args.log_dir)
+
