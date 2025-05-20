@@ -1,0 +1,2 @@
+Asked GPT wherever I didn't know syntax, like cuda stuff and nn.Sequential etc.
+Wrote everything by hand otherwise.

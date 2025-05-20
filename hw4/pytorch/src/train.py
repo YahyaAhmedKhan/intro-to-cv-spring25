@@ -1,4 +1,3 @@
-
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -163,4 +162,7 @@ if __name__ == "__main__":
     args.log_dir = args.log_dir / run_name
 
     train(model, data_train, data_val, args.num_epochs, args.lr, args.momentum, args.device, args.log_dir)
-
+    
+    
+    
+    

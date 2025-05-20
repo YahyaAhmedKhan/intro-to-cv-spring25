@@ -1,1 +1,0 @@
-this file may be deleted. it is a placeholder to ensure that the images/ directory is included

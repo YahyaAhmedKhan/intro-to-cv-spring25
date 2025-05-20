@@ -42,6 +42,9 @@ def get_dataloader(dataset_name: str, batch_size: int, train: bool, **kwargs) ->
         raise ValueError(f"Unknown dataset {dataset_name}")
     return DataLoader(ds, batch_size=batch_size, **kwargs)
 
+import sys
+sys.argv = ["datasets.py", "--dataset", "cifar10", "--batch_size", "64", "--train"]
+
 
 if __name__ == "__main__":
     import argparse
