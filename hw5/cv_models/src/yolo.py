@@ -18,7 +18,14 @@ class YOLOObjectDetector:
             # The YOLO model includes built-in preprocessing that can accept a list of
             # OpenCV-style images directly, as long as we do BGR to RGB conversion
             result = self.model([cv.cvtColor(img, cv.COLOR_BGR2RGB)])
-
-        raise NotImplementedError("YOUR CODE HERE. Read the docs / use your debugger to inspect what is returned by the model")
+            print(result)
+            # print(np.array(result.xyxy[0]).shape)
+            preds = np.array(result.xyxy[0])
+            for p in preds:
+              x1, y1, x2, y2, prob, cls = map(int, tuple(p))
+              cv.rectangle(img, (x1, y1), (x2, y2), self.colors(cls), 1)
+              # cv.rectangle(img, (x1, y1), (x2, y2), self.colors(cls), 1)
+              label = self.model.names[cls]
+              cv.putText(img, label, (x1, y1 - 5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv.LINE_AA)
 
         return img
