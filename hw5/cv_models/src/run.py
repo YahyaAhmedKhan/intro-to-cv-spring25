@@ -3,10 +3,10 @@ from pathlib import Path
 import cv2 as cv
 import numpy as np
 from face import FaceDetector
-from pose import PoseEstimator
-from yolo import YOLOObjectDetector
-from segment import SemanticSegmenter
-from sunglasses import SunglassesAnnotator
+# from pose import PoseEstimator
+# from yolo import YOLOObjectDetector
+# from segment import SemanticSegmenter
+# from sunglasses import SunglassesAnnotator
 from typing import Protocol
 import time
 
@@ -49,6 +49,7 @@ def run_live(model: DetectAndDrawModel, camera: int = 0, resize: float = 0.5):
         cv.imshow(f"{model.__class__.__name__} (press Q to quit)", frame)
         if cv.waitKey(1) == ord("q"):
             break
+
 
 
 if __name__ == "__main__":
@@ -113,19 +114,28 @@ if __name__ == "__main__":
         default=Path("images/sunglasses.png"),
         help="Path to png file with sunglasses.",
     )
+    import sys
+    sys.argv = [
+        "main.py",                       # Program name placeholder
+        "--image", "cv_models/images/solvay.jpg",           # Path to your test image (or "live" for webcam)
+        "--output-dir", "output_images", # Optional: output directory
+        "face",                          # Model type: face | pose | yolo | segment | sunglasses
+        "--model", "haarcascade_frontalface_alt.xml"  # Extra model-specific args
+    ]
+
 
     args = parser.parse_args()
 
     if args.model_type == "face":
         model = FaceDetector(args.model)
-    elif args.model_type == "pose":
-        model = PoseEstimator(args.detection_quality_threshold, args.keypoint_quality_threshold)
-    elif args.model_type == "yolo":
-        model = YOLOObjectDetector(args.detection_quality_threshold)
-    elif args.model_type == "segment":
-        model = SemanticSegmenter(alpha=args.alpha)
-    elif args.model_type == "sunglasses":
-        model = SunglassesAnnotator(str(args.glasses_image_path))
+    # elif args.model_type == "pose":
+    #     model = PoseEstimator(args.detection_quality_threshold, args.keypoint_quality_threshold)
+    # elif args.model_type == "yolo":
+    #     model = YOLOObjectDetector(args.detection_quality_threshold)
+    # elif args.model_type == "segment":
+    #     model = SemanticSegmenter(alpha=args.alpha)
+    # elif args.model_type == "sunglasses":
+    #     model = SunglassesAnnotator(str(args.glasses_image_path))
 
     if args.image == "live":
         run_live(model)

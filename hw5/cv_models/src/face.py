@@ -1,6 +1,9 @@
+from csv import Error
 import cv2 as cv
 import numpy as np
 from pathlib import Path
+
+from scipy.datasets import face
 
 
 class FaceDetector:
@@ -14,7 +17,18 @@ class FaceDetector:
     def detect_and_draw(self, img: np.ndarray) -> np.ndarray:
         img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         img_gray = cv.equalizeHist(img_gray)
+        
+        face_cascade = self.model
+        
+        faces = face_cascade.detectMultiScale(img_gray)
+        
+        for x, y, w, h in faces:
+            cv.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 1)
+            
+        
 
-        raise NotImplementedError("YOUR CODE HERE. Use self.model.detectMultiScale() to detect faces.")
-
+        # cv.imshow("Faces", img)
+        # cv.waitKey(0)
+        # cv.destroyAllWindows()
+        
         return img
