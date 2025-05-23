@@ -37,4 +37,47 @@ class SunglassesAnnotator:
                 shutil.copyfileobj(bz2_f, f)
 
     def detect_and_draw(self, img: np.ndarray) -> np.ndarray:
-        raise NotImplementedError("YOUR CODE HERE. OPTIONAL / EXTRA CREDIT.")
+      if self.sunglasses is None or self.sunglasses.shape[2] != 4 or \
+        self.sunglasses.shape[0] < 10 or self.sunglasses.shape[1] < 10:
+          return img  
+
+      result_img = img.copy()
+      gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+      faces = self.face_detect(gray)
+
+      for face in faces:
+          landmarks = self.face_pose(gray, face)
+          landmarks_points = [(landmarks.part(i).x, landmarks.part(i).y) for i in range(68)]
+
+          # Draw all 68 facial landmarks and their indices
+          # for i, point in enumerate(landmarks_points):
+          #     cv.circle(result_img, point, radius=2, color=(0, 255, 0), thickness=-1)
+          #     cv.putText(result_img, str(i), (point[0] + 3, point[1] - 3),
+          #               fontFace=cv.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(0, 0, 255), thickness=1)
+
+          face_points = [
+              landmarks_points[17],  # top left
+              landmarks_points[26],  # top right
+              landmarks_points[46],  # bottom right
+              landmarks_points[41]   # bottom left
+          ]
+
+          sunglasses_points = [
+              (0, 10),
+              (self.sunglasses.shape[1] - 10, 10),
+              (self.sunglasses.shape[1] - 43, self.sunglasses.shape[0] - 43),
+              (43, self.sunglasses.shape[0] - 43)
+          ]
+
+          M = cv.getPerspectiveTransform(
+              np.array(sunglasses_points, dtype=np.float32),
+              np.array(face_points, dtype=np.float32)
+          )
+          warped_sunglasses = cv.warpPerspective(self.sunglasses, M, (img.shape[1], img.shape[0]))
+
+          mask = warped_sunglasses[:, :, 3] / 255.0
+          mask_3channel = np.stack([mask] * 3, axis=2)
+          warped_sunglasses_rgb = warped_sunglasses[:, :, :3]
+          result_img = (1 - mask_3channel) * result_img + mask_3channel * warped_sunglasses_rgb
+
+      return result_img.astype(np.uint8)
